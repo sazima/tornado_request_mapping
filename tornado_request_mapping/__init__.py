@@ -11,15 +11,31 @@ from tornado.web import _has_stream_request_body, Application, HTTPError
 __all__ = ['request_mapping', 'Route']
 
 
+class MethodNotAllowed(Exception):
+    pass
+
+
+class RouteNotInit(Exception):
+    pass
+
+
+class MissedDecorator(Exception):
+    pass
+
+
 class RequestMapping:
+    allow_method = ['get', 'post', 'put', 'patch', 'delete', 'head', 'options', 'trace']
+
     def __init__(self, value, method):
+        if method not in self.allow_method:
+            raise MethodNotAllowed()
         self.value = value
         self.method = method
 
 
-def request_mapping(value: str, method: str = ''):
+def request_mapping(value: str, method: str = 'get'):
     def get_func(o, v: str):
-        setattr(o, 'request_mapping', RequestMapping(v, method))
+        setattr(o, 'request_mapping', RequestMapping(v, method.lower()))
         if inspect.isclass(o):
             if not value.startswith('/'):
                 app_log.warning("values should startswith / ")
@@ -96,9 +112,10 @@ class Route:
     def register(self, handler):
 
         if not self.app:
-            raise Exception('Please init app')
+            raise RouteNotInit('Please set app')
         if not hasattr(handler, 'request_mapping'):
-            raise Exception("Please use request_mapping")
+            raise MissedDecorator(
+                "Please use request_mapping. See example: https://github.com/sazima/tornado_request_mapping")
         class_mapping = getattr(handler, 'request_mapping', None)  # type: RequestMapping
         for string_method in dir(handler):
             method = getattr(handler, string_method)
