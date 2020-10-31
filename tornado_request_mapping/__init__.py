@@ -79,7 +79,10 @@ def _execute(self, transforms, *args, **kwargs):
         method_string = self._request_mapping_dict_.get(
             '_%s_request_mapping_%s' % (self.request.path, self.request.method.lower()))
         if not method_string:
-            raise HTTPError(405)
+            if self.request.method.lower() == 'options':
+                method_string = 'options'
+            else:
+                raise HTTPError(405)
         method = getattr(self, method_string)
         result = method(*self.path_args, **self.path_kwargs)
         if result is not None:
