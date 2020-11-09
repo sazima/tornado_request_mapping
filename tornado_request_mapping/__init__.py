@@ -111,11 +111,10 @@ class Route:
         self.urls = list()
         self.app = app
         self.prefix = prefix
+        self.host_handlers = []
 
     def register(self, handler):
 
-        if not self.app:
-            raise RouteNotInit('Please set app')
         if not hasattr(handler, 'request_mapping'):
             raise MissedDecorator(
                 "Please use request_mapping. See example: https://github.com/sazima/tornado_request_mapping")
@@ -130,15 +129,16 @@ class Route:
             handler._request_mapping_dict_.update({
                 '_%s_request_mapping_%s' % (full_path, method_mapping.method): string_method
             })
-            self.app.add_handlers(
-                r".*",  # match any host
-                [
-                    (
-                        r'{}'.format(full_path),
-                        handler
-                    )
-                ]
-            )
+            host_handler = (
+                    r'{}'.format(full_path),
+                    handler
+                )
+            if self.app is not None:
+                self.app.add_handlers(
+                    r".*",  # match any host
+                    [host_handler]
+                )
+            self.host_handlers.append(host_handler)
 
     def init_app(self, app):
         self.app = app
