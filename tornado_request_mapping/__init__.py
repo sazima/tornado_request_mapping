@@ -4,6 +4,7 @@ from typing import Optional
 
 from tornado import gen
 from tornado import iostream
+from tornado.websocket import WebSocketHandler
 from tornado.concurrent import future_set_result_unless_cancelled
 from tornado.log import app_log
 from tornado.web import _has_stream_request_body, Application, HTTPError
@@ -119,26 +120,31 @@ class Route:
             raise MissedDecorator(
                 "Please use request_mapping. See example: https://github.com/sazima/tornado_request_mapping")
         class_mapping = getattr(handler, 'request_mapping', None)  # type: RequestMapping
-        for string_method in dir(handler):
-            method = getattr(handler, string_method)
+        if issubclass(handler, WebSocketHandler):
+            self._add_mapping(handler, self.prefix + class_mapping.value, 'get', 'get')
+            return
+        for method_string in dir(handler):
+            method = getattr(handler, method_string)
             if not hasattr(method, 'request_mapping'):
                 continue
             method_mapping = getattr(method, 'request_mapping')  # type: RequestMapping
             full_path = self.prefix + class_mapping.value + method_mapping.value
-            # setattr(handler, '_%s_request_mapping_%s' % (full_path, method_mapping.method), method)
-            handler._request_mapping_dict_.update({
-                '_%s_request_mapping_%s' % (full_path, method_mapping.method): string_method
-            })
-            host_handler = (
-                    r'{}'.format(full_path),
-                    handler
-                )
-            if self.app is not None:
-                self.app.add_handlers(
-                    r".*",  # match any host
-                    [host_handler]
-                )
-            self.host_handlers.append(host_handler)
+            self._add_mapping(handler, full_path, method_mapping.method, method_string)
+
+    def _add_mapping(self, handler, full_path, http_method, method_string):
+        handler._request_mapping_dict_.update({
+            '_%s_request_mapping_%s' % (full_path, http_method): method_string
+        })
+        host_handler = (
+            r'{}'.format(full_path),
+            handler
+        )
+        if self.app is not None:
+            self.app.add_handlers(
+                r".*",  # match any host
+                [host_handler]
+            )
+        self.host_handlers.append(host_handler)
 
     def init_app(self, app):
         self.app = app
