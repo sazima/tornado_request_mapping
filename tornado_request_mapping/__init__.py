@@ -1,13 +1,15 @@
 import inspect
+import re
 from functools import partial
-from typing import Optional
+from typing import Optional, Dict
 
 from tornado import gen
 from tornado import iostream
+from tornado.routing import HostMatches
 from tornado.websocket import WebSocketHandler
 from tornado.concurrent import future_set_result_unless_cancelled
 from tornado.log import app_log
-from tornado.web import _has_stream_request_body, Application, HTTPError
+from tornado.web import _has_stream_request_body, Application, HTTPError, RequestHandler
 
 __all__ = ['request_mapping', 'Route']
 
@@ -77,8 +79,16 @@ def _execute(self, transforms, *args, **kwargs):
             except iostream.StreamClosedError:
                 return
 
-        method_string = self._request_mapping_dict_.get(
-            '_%s_request_mapping_%s' % (self.request.path, self.request.method.lower()))
+        _request_mapping_dict_ = self._request_mapping_dict_  # type: Dict[str, Dict[re.Pattern, str]]
+        possible_host_matcher_to_method_string = _request_mapping_dict_.get(self.request.method.lower())
+        method_string = ''
+        if possible_host_matcher_to_method_string:
+            for host_matcher_compile, _method_string in possible_host_matcher_to_method_string.items():
+                # host_matcher = HostMatches(host_matcher_str)
+                target_params = host_matcher_compile.match(self.request.path)
+                if target_params is not None:
+                    method_string = _method_string
+                    break
         if not method_string:
             if self.request.method.lower() == 'options':
                 method_string = 'options'
@@ -131,12 +141,13 @@ class Route:
             full_path = self.prefix + class_mapping.value + method_mapping.value
             self._add_mapping(handler, full_path, method_mapping.method, method_string)
 
-    def _add_mapping(self, handler, full_path, http_method, method_string):
-        handler._request_mapping_dict_.update({
-            '_%s_request_mapping_%s' % (full_path, http_method): method_string
-        })
+    def _add_mapping(self, handler, full_path: str, http_method: str, method_string: str):
+        host_matcher = HostMatches(full_path)
+        _request_mapping_dict_ = handler._request_mapping_dict_  # type: Dict[str, Dict[re.Pattern, str]]
+        _request_mapping_dict_.setdefault(http_method, {})
+        _request_mapping_dict_[http_method].setdefault(host_matcher.host_pattern, method_string)
         host_handler = (
-            r'{}'.format(full_path),
+            full_path,
             handler
         )
         if self.app is not None:
