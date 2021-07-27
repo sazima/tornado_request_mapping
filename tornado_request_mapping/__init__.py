@@ -5,11 +5,11 @@ from typing import Optional, Dict
 
 from tornado import gen
 from tornado import iostream
-from tornado.routing import HostMatches
-from tornado.websocket import WebSocketHandler
 from tornado.concurrent import future_set_result_unless_cancelled
 from tornado.log import app_log
-from tornado.web import _has_stream_request_body, Application, HTTPError, RequestHandler
+from tornado.routing import HostMatches
+from tornado.web import _has_stream_request_body, Application, HTTPError
+from tornado.websocket import WebSocketHandler
 
 __all__ = ['request_mapping', 'Route']
 
@@ -32,8 +32,8 @@ class RequestMapping:
     def __init__(self, value, method):
         if method not in self.allow_method:
             raise MethodNotAllowed()
-        self.value = value
-        self.method = method
+        self.value = value  # type: str
+        self.method = method  # type: str
 
 
 def request_mapping(value: str, method: str = 'get'):
@@ -138,7 +138,7 @@ class Route:
             if not hasattr(method, 'request_mapping'):
                 continue
             method_mapping = getattr(method, 'request_mapping')  # type: RequestMapping
-            full_path = self.prefix + class_mapping.value + method_mapping.value
+            full_path = self._get_full_path(class_mapping, method_mapping)
             self._add_mapping(handler, full_path, method_mapping.method, method_string)
 
     def _add_mapping(self, handler, full_path: str, http_method: str, method_string: str):
@@ -156,6 +156,14 @@ class Route:
                 [host_handler]
             )
         self.host_handlers.append(host_handler)
+
+    def _get_full_path(self, class_mapping: RequestMapping, method_mapping: RequestMapping):
+        full_path = self.prefix + class_mapping.value
+        if class_mapping.value.endswith('/') and method_mapping.value.startswith('/'):
+            full_path += method_mapping.value[1:]
+        else:
+            full_path += method_mapping.value
+        return full_path
 
     def init_app(self, app):
         self.app = app

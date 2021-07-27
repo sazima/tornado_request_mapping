@@ -7,7 +7,7 @@ with open("readme.md", "r", encoding="utf8") as f:
 
 setup(
     name='tornado-request-mapping',
-    version='0.0.3',
+    version='0.0.4',
     author='wukt',
     author_email='w@wktadmin.com',
     url='https://github.com/sazima/tornado_request_mapping',
