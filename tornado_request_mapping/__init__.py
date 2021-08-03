@@ -29,16 +29,17 @@ class MissedDecorator(Exception):
 class RequestMapping:
     allow_method = ['get', 'post', 'put', 'patch', 'delete', 'head', 'options', 'trace']
 
-    def __init__(self, value, method):
+    def __init__(self, value, method, description):
         if method not in self.allow_method:
             raise MethodNotAllowed()
         self.value = value  # type: str
         self.method = method  # type: str
+        self.description = description  # type: str
 
 
-def request_mapping(value: str, method: str = 'get'):
+def request_mapping(value: str, method: str = 'get', description: str = ''):
     def get_func(o, v: str):
-        setattr(o, 'request_mapping', RequestMapping(v, method.lower()))
+        setattr(o, 'request_mapping', RequestMapping(v, method.lower(), description))
         if inspect.isclass(o):
             if not value.startswith('/'):
                 app_log.warning("values should startswith / ")
@@ -131,7 +132,7 @@ class Route:
                 "Please use request_mapping. See example: https://github.com/sazima/tornado_request_mapping")
         class_mapping = getattr(handler, 'request_mapping', None)  # type: RequestMapping
         if issubclass(handler, WebSocketHandler):
-            self._add_mapping(handler, self.prefix + class_mapping.value, 'get', 'get')
+            self._add_mapping(handler, self.prefix + class_mapping.value, 'get', 'get', class_mapping.description)
             return
         for method_string in dir(handler):
             method = getattr(handler, method_string)
@@ -139,21 +140,32 @@ class Route:
                 continue
             method_mapping = getattr(method, 'request_mapping')  # type: RequestMapping
             full_path = self._get_full_path(class_mapping, method_mapping)
-            self._add_mapping(handler, full_path, method_mapping.method, method_string)
+            self._add_mapping(handler, full_path, method_mapping.method, method_string, method_mapping.description)
 
-    def _add_mapping(self, handler, full_path: str, http_method: str, method_string: str):
+    def _add_mapping(self, handler, full_path: str, http_method: str, method_string: str, description: str):
         host_matcher = HostMatches(full_path)
         _request_mapping_dict_ = handler._request_mapping_dict_  # type: Dict[str, Dict[re.Pattern, str]]
         _request_mapping_dict_.setdefault(http_method, {})
         _request_mapping_dict_[http_method].setdefault(host_matcher.host_pattern, method_string)
-        host_handler = (
-            full_path,
-            handler
-        )
+        if description:
+            host_handler = (
+                full_path,
+                handler,
+                description
+            )
+        else:
+            host_handler = (
+                full_path,
+                handler
+            )
+        # host_handler_for_mg =
         if self.app is not None:
             self.app.add_handlers(
                 r".*",  # match any host
-                [host_handler]
+                [(
+                    full_path,
+                    handler
+                )]
             )
         self.host_handlers.append(host_handler)
 
